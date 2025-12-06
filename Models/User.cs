@@ -1,10 +1,12 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
 
 namespace SnackToSixPack.Classes
 {
     public class User
     {
+        [Key]
         public int Id {get; set; }
         public string UserName { get; set; }
         public string Email { get; set; }
