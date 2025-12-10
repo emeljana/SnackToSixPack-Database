@@ -9,178 +9,101 @@ using System.Reflection.Metadata;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using SnackToSixPack.Models;
 
 namespace SnackToSixPack.Handlers
 {
-    internal class RegistrationHandler
+    public class  RegistrationHandler
     {
-        public static async Task Run()
+        public static async Task RegistrationForm()
         {
-            User user = new User();
-            // Läs in användare från JSON (eller skapa en tom lista)
-            List<User> users = JSONFileHanldler.Load<List<User>>(
-            Path.Combine($"Data", "Users.json")
-            );
-
-            if (users == null)
+            using (var db = new AppDbContext())
             {
-                users = new List<User>();  // skapa tom lista om den inte finns
-                JSONFileHanldler.Save(Path.Combine("Data", "Users.json"), users);
-            }
+                AnsiConsole.Clear();
+                MenuHandler.ShowTitle();
+                AnsiConsole.MarkupLine("[blue]----- Register user -----[/]");
 
-            AnsiConsole.Clear();
-            MenuHandler.ShowTitle();
-            AnsiConsole.MarkupLine("[BlueViolet]=== REGISTER NEW USER ===[/]");
+                string username = "";
+                bool runRegister = true;
 
-            string username;
-            while (true)
-            {
-                AnsiConsole.Markup("[aqua]Enter username:[/] ");
-                username = Console.ReadLine();
-
-                if (string.IsNullOrWhiteSpace(username))
+                while (runRegister)
                 {
-                    AnsiConsole.MarkupLine("[red] Username cannot be empty. Try again![/]");
-                    continue;
+                    username = AnsiConsole.Ask<string>("[bold]Username:[/]");
+
+                    if (string.IsNullOrEmpty(username))
+                    {
+                        AnsiConsole.MarkupLine("[red]Username cannot be empty. Try again.[/]");
+                        continue;
+                    }
+                    
+                    bool usernameExists = db.Users.Any(u => u.UserName.ToLower() == username.ToLower());
+
+                    if (usernameExists)
+                    {
+                        AnsiConsole.MarkupLine("[red]Username already exists. Try again.[/]");
+                        continue;
+                    }
+                    
+                    runRegister = false;
                 }
 
-                bool usernameExists = users.Any(u => u.UserName.Equals(username, StringComparison.OrdinalIgnoreCase));
-
-                if (usernameExists)
+                string password = "";
+                bool rightPasword = false;
+                while (!rightPasword)
                 {
-                    AnsiConsole.MarkupLine("[red]That username already exists. Choose another![/]");
-                    continue;
+                    var enterPasword = new TextPrompt<string>("[bold]Password: [/]")
+                        .PromptStyle("green")
+                        .Secret();
+                    
+                    string passwordPrompt = AnsiConsole.Prompt(enterPasword);
+
+                    rightPasword = PasswordValidator.IsPassWordStrong(passwordPrompt);
+                    if (rightPasword)
+                    {
+                        password = passwordPrompt;
+                    }
                 }
 
-                break;
-            }
-
-            string password = "";
-            bool rightPassword = false;
-            while (!rightPassword)
-            {
-                var passwordPrompt =
-                new TextPrompt<string>("[green]Enter password (min 6 characters):[/]")
-                    .PromptStyle("white")
-                    .Secret();
-
-                string passwordInput = AnsiConsole.Prompt(passwordPrompt);
-
-                rightPassword = PasswordValidator.IsPassWordStrong(passwordInput);
-                if (rightPassword)
+                string email = "";
+                bool correctEmail = false;
+                while (!correctEmail)
                 {
-                    password = passwordInput;
-                }
-            }
-            ;
+                    email = AnsiConsole.Prompt(new TextPrompt<string>("[bold]Email: [/]")
+                        .PromptStyle("green")
+                        .Validate(email =>
+                            email.Contains("@")
+                                ? ValidationResult.Success()
+                                : ValidationResult.Error("Invalid email address"))
+                    );
+                
+                    bool emailExists = db.Users.Any(u => u.Email.ToLower() == email.ToLower());
+                    if (emailExists)
+                    {
+                        AnsiConsole.MarkupLine("[red]Email already exist. Try again.[/]");
+                        continue;
+                    }
 
-            string email;
-            while (true)
-            {
-                AnsiConsole.Markup("[green]Enter email (example: name@mail.com):[/] ");
-                email = Console.ReadLine();
-
-                if (string.IsNullOrWhiteSpace(email) || !email.Contains("@") || !email.Contains("."))
-                {
-                    AnsiConsole.MarkupLine("[red] Please enter a valid email (like name@mail.com)[/]");
-                    continue;
+                    correctEmail = true;
                 }
 
-                bool emailExists = users.Any(u =>
-                    u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
-
-                if (emailExists)
+                var newUser = new User
                 {
-                    AnsiConsole.MarkupLine("[red] That email is already registered![/]");
-                    continue;
-                }
-
-                break;
-            }
-
-            int nextId = (users.Any() ? users.Max(u => u.Id) + 1 : 1);
-
-            var newUser = new User
-            {
-                Id = nextId,
-                UserName = username,
-                Email = email,
-                Password = password
-            };
-
-            if (!Directory.Exists($"Data/Users/{nextId.ToString()}"))
-                Directory.CreateDirectory($"Data/Users/{nextId.ToString()}");
-            // om programmet krashar, kolla hit
-            users.Add(newUser);
-            
-            
-            JSONFileHanldler.Save("Data/Users.json", users);
-
-            // Sätt inloggad användare temporärt så CreateProfile funkar
-            Session.SetCurrentUser(newUser);
-
-            // Skapa profil
-            ProfileHandler newProfile = new ProfileHandler();
-            newProfile.CreateProfile();
-
-            // Efter profil: logga ut så användaren får logga in manuellt
-            Session.SetCurrentUser(null);
-
-            AnsiConsole.Clear();
-            AnsiConsole.MarkupLine("\n[bold green]Registration successful![/]");
-            AnsiConsole.MarkupLine("Please log in to continue.");
-
-            await Task.Delay(3000);
-            AuthForms.ShowLogInForm();
-            return;
-
-        }
-        
-        // Save users to JSON file
-        private static void SaveUsers(List<User> users)
-        {
-            string folder = "Data";
-            string path = Path.Combine(folder, "Users.json");
-
-            if (!Directory.Exists(folder))
-                Directory.CreateDirectory(folder);
-
-            string json = JsonSerializer.Serialize(users, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-
-            File.WriteAllText(path, json);
-        }
-
-        // Load users from JSON file 
-        private static List<User> LoadUsers()
-        {
-            string folder = "Data";
-            string path = Path.Combine(folder, "Users.json");
-
-            if (!Directory.Exists(folder))
-                Directory.CreateDirectory(folder);
-
-            // Om filen inte finns → tom lista
-            if (!File.Exists(path))
-                return new List<User>();
-
-            string json = File.ReadAllText(path);
-
-            // Om filen är tom → tom lista
-            if (string.IsNullOrWhiteSpace(json))
-                return new List<User>();
-
-            // Försök läsa JSON
-            try
-            {
-                return JsonSerializer.Deserialize<List<User>>(json) ?? new List<User>();
-            }
-            catch
-            {
-                AnsiConsole.MarkupLine("[red] Users.json is invalid. Starting with an empty list.[/]");
-                return new List<User>();
+                    UserName = username,
+                    Password = password,
+                    Email = email
+                };
+                
+                // .Add "Queue this entity to be inserted later", staged the insert
+                db.Add(newUser);
+                // Accually save to the database, executes the insert
+                db.SaveChanges();
+                
+                AnsiConsole.Clear();
+                AnsiConsole.MarkupLine("[green]Successfully registered successfully![/]");
+                AnsiConsole.Status()
+                    .Start("Please wait...\n Redirecting", ctx => System.Threading.Thread.Sleep(2000));
+                
+                AuthForms.ShowLogInForm();
             }
         }
     
