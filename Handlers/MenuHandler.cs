@@ -46,7 +46,7 @@ namespace SnackToSixPack.Handlers
                         break;
 
                     case "Register":
-                            await RegistrationHandler.Run();
+                            await RegistrationHandler.RegistrationForm();
                             if (Session.CurrentUser != null)
                             await ShowUserMenu();
                         break;

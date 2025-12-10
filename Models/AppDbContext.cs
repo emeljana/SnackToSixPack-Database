@@ -10,8 +10,11 @@ public class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
-
+    // parameterless konstruktor för att slippa argument när vi skapar objektet
+    public AppDbContext() : base()
+    {}
     public DbSet<User> Users { get; set; }
+    public DbSet<Profile> Profiles { get; set; }
     public DbSet<WorkoutPlan> WorkoutPlans { get; set; }
     public DbSet<Exercise> Exercises { get; set; }
     public DbSet<PlanExercise> PlanExercises { get; set; }
@@ -21,12 +24,18 @@ public class AppDbContext : DbContext
     {
         if (!optionsBuilder.IsConfigured)
         {
-            optionsBuilder.UseSqlite("Data Source=snacktosixpack.db");
+            var dbPath = Path.Combine(AppContext.BaseDirectory, "snacktosixpack.db");
+            Console.WriteLine("DB PATH => " + dbPath);
+            optionsBuilder.UseSqlite($"Data Source={dbPath}");
         }
     }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Profile>()
+            .HasOne<User>()
+            .WithOne(u => u.Profile)
+            .HasForeignKey<Profile>(p => p.UserId);
+        
         modelBuilder.Entity<WorkoutPlan>()
             .HasOne<User>()
             .WithMany()
@@ -53,8 +62,12 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     public AppDbContext CreateDbContext(string[] args)
     {
+        var dbPath = Path.Combine(AppContext.BaseDirectory, "snacktosixpack.db");
+
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-        optionsBuilder.UseSqlite("Data Source=snacktosixpack.db");
+        optionsBuilder.UseSqlite($"Data Source={dbPath}");
+
+        Console.WriteLine("FACTORY DB PATH => " + dbPath);
 
         return new AppDbContext(optionsBuilder.Options);
     }
